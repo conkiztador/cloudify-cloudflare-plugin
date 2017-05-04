@@ -20,8 +20,71 @@ from cloudify import ctx
 # put the operation decorator on any function that is a task
 from cloudify.decorators import operation
 
+import CloudFlare as cloudflare
+
+
+CF_CONFIG = 'cloudflare_config'
+
 
 @operation
-def my_task(some_property, **kwargs):
+def update_record(name, ip, **kwargs):
     # setting node instance runtime property
-    ctx.instance.runtime_properties['some_property'] = some_property
+    ctx.logger.info("name: %s", name)
+    ctx.logger.info("ip: %s", ip)
+
+    try:
+        config = ctx.node.properties[CF_CONFIG]
+    except NonRecoverableError:
+        config = ctx.source.node.properties[CF_CONFIG]
+
+    cf = cloudflare.CloudFlare(email=config['email'], token=config['key'])
+    zone_name = config['domain_name']
+    try:
+        params = {'name':zone_name}
+        zones = cf.zones.get(params=params)
+    except cloudflare.exceptions.CloudFlareAPIError as e:
+        ctx.logger.error("Error retrieving zone info from CloudFlare")
+        raise
+
+    ctx.logger.info("Found zone: %s", zone_name)
+
+    zone = zones[0]
+    zone_id = zone['id']
+
+    record_type = 'A'
+    name = '.'.join([name, zone_name])
+
+    try:
+        params = {'name': name, 'match':'all', 'type': record_type}
+        dns_records = cf.zones.dns_records.get(zone_id, params=params)
+    except cloudflare.exceptions.CloudFlareAPIError as e:
+        ctx.logger.error("Error getting DNS records from CloudFlare")
+        raise
+
+    new_record = {
+        'name': name,
+        'type': record_type,
+        'content': ip,
+    }
+
+    for dns_record in dns_records:
+        ctx.logger.info("Found existing record: %s = %s", dns_record['name'], dns_record['content'])
+        if ip == dns_record['content']:
+            ctx.logger.info("Nothing to do.")
+            break
+
+        ctx.logger.info("Updating record %s to %s", dns_record['name'], new_record['content'])
+        dns_record_id = dns_record['id']
+        try:
+            dns_record = cf.zones.dns_records.put(zone_id, dns_record_id, data=new_record)
+        except cloudflare.exceptions.CloudFlareAPIError as e:
+            ctx.logger.error("Error updating DNS record")
+            raise
+
+    if not dns_records:
+        ctx.logger.info("Creating new record %s = %s", new_record['name'], new_record['content'])
+        try:
+            dns_record = cf.zones.dns_records.post(zone_id, data=new_record)
+        except cloudflare.exceptions.CloudFlareAPIError as e:
+            ctx.logger.error("Error creating DNS record")
+            raise
