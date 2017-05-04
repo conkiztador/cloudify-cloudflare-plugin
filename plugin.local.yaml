@@ -10,15 +10,4 @@ plugins:
     # URL to archive containing the plugin or name of directory containing
     # the plugin if it is included in the the blueprint directory under the
     # "plugins" directory.
-    source: https://github.com/conkiztador/cloudify-cloudflare-plugin/archive/master.zip
-
-
-node_types:
-  cloudify.cloudflare.nodes.DNSRecord:
-    derived_from: cloudify.nodes.Root
-    properties:
-      cloudflare_config:
-        default: {}
-        description: >
-          Expected to contain the following nested fields:
-          email, key, domain_name
+    source: 'cloudflare'

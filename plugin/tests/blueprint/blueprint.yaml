@@ -12,31 +12,51 @@ imports:
     - plugin/test_plugin.yaml
 
 inputs:
-    # example input that could be injected by test
-    test_input:
-        description: an input for the test
-        default: default_test_input
+    name:
+      type: string
+
+    ip:
+      type: string
+
+    cloudflare_email:
+      type: string
+
+    cloudflare_key:
+      type: string
+
+    cloudflare_domain_name:
+      type: string
+
+
+dsl_definitions:
+  cloudflare_config: &cloudflare_config
+    email: { get_input: cloudflare_email }
+    domain_name: { get_input: cloudflare_domain_name }
+    key: { get_input: cloudflare_key }
 
 node_templates:
+    lab_vm:
+      type: cloudify.nodes.Compute
+      properties:
+        agent_config:
+          install_method: none
+        ip: { get_input: ip }
+
     # defining a single node template that will serve as our test node
     test_node_template:
-        # using base cloudify type
         type: cloudify.nodes.Root
+        properties:
+          cloudflare_config: *cloudflare_config
         interfaces:
             cloudify.interfaces.lifecycle:
                 start:
-                    # here we map the single plugin task to the start operation
-                    # of the cloudify.interfaces.lifecycle interface
-                    implementation: plugin_name.plugin.tasks.my_task
+                    implementation: cloudflare.plugin.tasks.update_record
                     inputs:
-                        # my_task accepts a single property named
-                        # some property. Here we inject this property
-                        # from the input provided by the test
-                        # (or 'default_test_input' if no input was provided)
-                        some_property: { get_input: test_input }
+                        name: { get_input: name  }
+                        ip: { get_property: [lab_vm, ip] }
 
-outputs:
-    # example output the could be used to simplify assertions by test
-    test_output:
-        description: an output for the test
-        value: { get_attribute: [test_node_template, some_property] }
+# outputs:
+#     # example output the could be used to simplify assertions by test
+#     test_output:
+#         description: an output for the test
+#         value: { get_attribute: [test_node_template, result] }
